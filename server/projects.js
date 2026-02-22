@@ -65,6 +65,18 @@ import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import os from 'os';
+import { sessionNamesDb } from './database/db.js';
+
+// Apply custom session names from the database (overrides CLI-generated summaries)
+function applyCustomSessionNames(sessions, provider) {
+  if (!sessions?.length) return;
+  const ids = sessions.map(s => s.id);
+  const customNames = sessionNamesDb.getNames(ids, provider);
+  for (const session of sessions) {
+    const custom = customNames.get(session.id);
+    if (custom) session.summary = custom;
+  }
+}
 
 // Import TaskMaster detection functions
 async function detectTaskMasterFolder(projectPath) {
@@ -456,7 +468,8 @@ async function getProjects(progressCallback = null) {
             total: 0
           };
         }
-        
+        applyCustomSessionNames(project.sessions, 'claude');
+
         // Also fetch Cursor sessions for this project
         try {
           project.cursorSessions = await getCursorSessions(actualProjectDir);
@@ -464,6 +477,7 @@ async function getProjects(progressCallback = null) {
           console.warn(`Could not load Cursor sessions for project ${entry.name}:`, e.message);
           project.cursorSessions = [];
         }
+        applyCustomSessionNames(project.cursorSessions, 'cursor');
 
         // Also fetch Codex sessions for this project
         try {
@@ -474,6 +488,7 @@ async function getProjects(progressCallback = null) {
           console.warn(`Could not load Codex sessions for project ${entry.name}:`, e.message);
           project.codexSessions = [];
         }
+        applyCustomSessionNames(project.codexSessions, 'codex');
 
         // Add TaskMaster detection
         try {
@@ -550,12 +565,15 @@ async function getProjects(progressCallback = null) {
           codexSessions: []
       };
 
+      applyCustomSessionNames(project.sessions, 'claude');
+
       // Try to fetch Cursor sessions for manual projects too
       try {
         project.cursorSessions = await getCursorSessions(actualProjectDir);
       } catch (e) {
         console.warn(`Could not load Cursor sessions for manual project ${projectName}:`, e.message);
       }
+      applyCustomSessionNames(project.cursorSessions, 'cursor');
 
       // Try to fetch Codex sessions for manual projects too
       try {
@@ -565,6 +583,7 @@ async function getProjects(progressCallback = null) {
       } catch (e) {
         console.warn(`Could not load Codex sessions for manual project ${projectName}:`, e.message);
       }
+      applyCustomSessionNames(project.codexSessions, 'codex');
 
       // Add TaskMaster detection for manual projects
       try {
@@ -1054,10 +1073,13 @@ async function renameProject(projectName, newDisplayName) {
   
   if (!newDisplayName || newDisplayName.trim() === '') {
     // Remove custom name if empty, will fall back to auto-generated
-    delete config[projectName];
+    if (config[projectName]) {
+      delete config[projectName].displayName;
+    }
   } else {
-    // Set custom display name
+    // Set custom display name, preserving other properties (manuallyAdded, originalPath)
     config[projectName] = {
+      ...config[projectName],
       displayName: newDisplayName.trim()
     };
   }
