@@ -6,6 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useTranslation } from 'react-i18next';
 import { IS_PLATFORM } from '../constants/config';
+import TerminalShortcutsPanel from './TerminalShortcutsPanel';
 
 const xtermStyles = `
   .xterm .xterm-screen {
@@ -121,6 +122,19 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
     }
 
     return copied;
+  }, []);
+
+  // Send raw input to the terminal (used by TerminalShortcutsPanel)
+  const sendInput = useCallback((data) => {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({ type: 'input', data }));
+    }
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    if (terminal.current) {
+      terminal.current.scrollToBottom();
+    }
   }, []);
 
   const connectWebSocket = useCallback(async () => {
@@ -684,6 +698,8 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell 
             </div>
           </div>
         )}
+
+        <TerminalShortcutsPanel onSendInput={sendInput} onScrollDown={scrollToBottom} isConnected={isConnected} />
       </div>
     </div>
   );
